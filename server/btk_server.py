@@ -26,7 +26,7 @@ config.read(CONFIG_PATH)
 
 DEVICE_NAME = config.get("device", "name", fallback="RaspiControl")
 
-AGENT_PATH = "/org/thanhle/btkbagent"
+AGENT_PATH = "/wof2/raspicontrol/agent"
 DEVICE_CLASS = "0x002540"
 
 
