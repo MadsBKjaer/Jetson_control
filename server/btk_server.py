@@ -24,7 +24,6 @@ CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "co
 config = configparser.ConfigParser()
 config.read(CONFIG_PATH)
 
-TARGET_ADDRESS = config.get("device", "target_address", fallback="")
 DEVICE_NAME = config.get("device", "name", fallback="RaspiControl")
 
 AGENT_PATH = "/org/thanhle/btkbagent"
@@ -199,9 +198,6 @@ if __name__ == "__main__":
     try:
         if not os.geteuid() == 0:
             sys.exit("Only root can run this script")
-
-        if TARGET_ADDRESS == "":
-            sys.exit("Set target_address in config.ini")
 
         DBusGMainLoop(set_as_default=True)
         bus = dbus.SystemBus()

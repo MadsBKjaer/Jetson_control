@@ -21,24 +21,14 @@ sudo ./setup.sh
 
 This installs BlueZ, Python packages, configures D-BUS permissions, and disables Bluetooth audio plugins (required for Windows compatibility).
 
-### Step 2: Configure
+### Step 2: Configure (optional)
 
-Edit `config.ini`:
+Edit `config.ini` to change the device name visible during Bluetooth discovery:
 
 ```ini
 [device]
 name = RaspiControl
-target_address = 40:EC:99:50:CF:E3
 ```
-
-- `name` — device name visible during Bluetooth discovery
-- `target_address` — Bluetooth MAC of your host PC
-
-**How to find the MAC on Windows:**
-```cmd
-ipconfig /all
-```
-Look for "Bluetooth Network Connection" → "Physical Address" (e.g. `40-EC-99-50-CF-E3`), replace dashes with colons: `40:EC:99:50:CF:E3`.
 
 ### Step 3: Start the server
 
