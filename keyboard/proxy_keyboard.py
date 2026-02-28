@@ -54,8 +54,8 @@ class BtkStringClient():
         }
         self.bus = dbus.SystemBus()
         self.btkservice = self.bus.get_object(
-            'org.thanhle.btkbservice', '/org/thanhle/btkbservice')
-        self.iface = dbus.Interface(self.btkservice, 'org.thanhle.btkbservice')
+            'wof2.raspicontrol.service', '/wof2/raspicontrol/service')
+        self.iface = dbus.Interface(self.btkservice, 'wof2.raspicontrol.service')
 
     def send_key_state(self):
         bin_str = "".join(map(str, self.state[2]))

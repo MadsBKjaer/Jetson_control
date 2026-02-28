@@ -61,8 +61,8 @@ class BtkStringClient():
         print("setting up DBus Client")
         self.bus = dbus.SystemBus()
         self.btkservice = self.bus.get_object(
-            'org.thanhle.btkbservice', '/org/thanhle/btkbservice')
-        self.iface = dbus.Interface(self.btkservice, 'org.thanhle.btkbservice')
+            'wof2.raspicontrol.service', '/wof2/raspicontrol/service')
+        self.iface = dbus.Interface(self.btkservice, 'wof2.raspicontrol.service')
 
     def send_key_state(self):
         """sends a single frame of the current key state to the emulator server"""

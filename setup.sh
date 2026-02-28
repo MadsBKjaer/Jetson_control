@@ -6,7 +6,7 @@ sudo apt-get update -y
 sudo apt-get install -y --ignore-missing bluez bluez-tools python3 python3-dbus python3-pyudev python3-evdev python3-gi
 
 echo "=== Configuring D-BUS permissions ==="
-sudo cp dbus/org.thanhle.btkbservice.conf /etc/dbus-1/system.d
+sudo cp dbus/wof2.raspicontrol.service.conf /etc/dbus-1/system.d
 sudo systemctl restart dbus.service
 
 echo "=== Configuring Bluetooth service (disabling audio plugins) ==="

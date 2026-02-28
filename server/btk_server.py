@@ -157,9 +157,9 @@ class BTKbService(dbus.service.Object):
     def __init__(self):
         print("1. Setting up service")
         bus_name = dbus.service.BusName(
-            "org.thanhle.btkbservice", bus=dbus.SystemBus())
+            "wof2.raspicontrol.service", bus=dbus.SystemBus())
         dbus.service.Object.__init__(
-            self, bus_name, "/org/thanhle/btkbservice")
+            self, bus_name, "/wof2/raspicontrol/service")
         self.device = BTKbDevice()
 
         # Start listening in a thread so GLib mainloop can handle D-BUS
@@ -170,7 +170,7 @@ class BTKbService(dbus.service.Object):
         self.device.listen()
         print("\033[0;32mReady to send HID reports!\033[0m")
 
-    @dbus.service.method('org.thanhle.btkbservice', in_signature='yay')
+    @dbus.service.method('wof2.raspicontrol.service', in_signature='yay')
     def send_keys(self, modifier_byte, keys):
         print("Get send_keys request through dbus")
         print("key msg: ", keys)
@@ -183,7 +183,7 @@ class BTKbService(dbus.service.Object):
             count += 1
         self.device.send_string(state)
 
-    @dbus.service.method('org.thanhle.btkbservice', in_signature='yay')
+    @dbus.service.method('wof2.raspicontrol.service', in_signature='yay')
     def send_mouse(self, modifier_byte, keys):
         state = [0xA1, 2, 0, 0, 0, 0]
         count = 2

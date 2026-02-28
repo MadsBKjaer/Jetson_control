@@ -45,8 +45,8 @@ class Keyboard():
 
         self.bus = dbus.SystemBus()
         self.btkservice = self.bus.get_object(
-            'org.thanhle.btkbservice', '/org/thanhle/btkbservice')
-        self.iface = dbus.Interface(self.btkservice, 'org.thanhle.btkbservice')
+            'wof2.raspicontrol.service', '/wof2/raspicontrol/service')
+        self.iface = dbus.Interface(self.btkservice, 'wof2.raspicontrol.service')
         print("waiting for keyboard")
         # keep trying to key a keyboard
         have_dev = False
