@@ -21,9 +21,18 @@ sudo ./setup.sh
 
 This installs BlueZ, Python packages, configures D-BUS permissions, and disables Bluetooth audio plugins (required for Windows compatibility).
 
-### Step 2: Configure target host MAC address
+### Step 2: Configure
 
-Edit `server/btk_server.py` and set `TARGET_ADDRESS` to your host PC's Bluetooth MAC address.
+Edit `config.ini`:
+
+```ini
+[device]
+name = RaspiControl
+target_address = 40:EC:99:50:CF:E3
+```
+
+- `name` — device name visible during Bluetooth discovery
+- `target_address` — Bluetooth MAC of your host PC
 
 **How to find the MAC on Windows:**
 ```cmd
@@ -45,9 +54,19 @@ The server will:
 
 ### Step 4: Pair from your host
 
-On Windows: **Settings → Bluetooth & devices → Add device** → find "ThanhLe_Keyboard_Mouse" → click to pair.
+On Windows: **Settings → Bluetooth & devices → Add device** → find the device name from `config.ini` → click to pair.
 
 The device will pair automatically and connect as a keyboard.
+
+### Troubleshooting: Re-pairing
+
+If pairing fails or you need to pair again, remove old pairing from RPi first:
+
+```
+sudo ./unpair.sh
+```
+
+Then remove the device from your host (Windows: Bluetooth settings → Remove device) and repeat from Step 3.
 
 ### Step 5: Send input
 
