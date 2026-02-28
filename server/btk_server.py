@@ -165,6 +165,8 @@ if __name__ == "__main__":
         if not os.geteuid() == 0:
             sys.exit("Only root can run this script")
 
+        DBusGMainLoop(set_as_default=True)
+
         # Check for paired devices
         paired = get_paired_devices()
         if not paired:
@@ -173,8 +175,6 @@ if __name__ == "__main__":
             print("  sudo python3 pair.py")
             sys.exit(1)
         print("Paired devices: %s" % ", ".join(paired))
-
-        DBusGMainLoop(set_as_default=True)
 
         myservice = BTKbService()
         loop = GLib.MainLoop()

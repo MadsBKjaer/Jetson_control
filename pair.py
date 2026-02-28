@@ -5,8 +5,8 @@
 # The HID profile + SDP record must be visible during pairing so the
 # host recognises the RPi as a keyboard/mouse.
 #
-# After pairing, stop this script and use btk_server.py (or the
-# systemd service) for day-to-day operation.
+# After pairing completes, this script automatically launches
+# btk_server.py to handle HID connections.
 #
 
 from __future__ import absolute_import, print_function
@@ -17,6 +17,7 @@ import dbus
 import dbus.service
 import dbus.mainloop.glib
 import socket
+import time
 import threading
 from gi.repository import GLib
 from dbus.mainloop.glib import DBusGMainLoop
@@ -101,7 +102,7 @@ def register_hid_profile(bus):
     print("HID profile registered")
 
 
-def listen_l2cap():
+def listen_l2cap(loop):
     """Listen for L2CAP connections in background so pairing completes."""
     P_CTRL, P_INTR = 17, 19
     scontrol = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_SEQPACKET, socket.BTPROTO_L2CAP)
@@ -120,22 +121,16 @@ def listen_l2cap():
 
     cinterrupt, cinfo = sinterrupt.accept()
     print("\033[0;32mInterrupt channel connected from %s\033[0m" % cinfo[0])
-    print("\033[0;32mPairing complete! You can now stop this script (Ctrl+C).\033[0m")
-    print("Then start the HID server:  sudo python3 server/btk_server.py")
-    print("Or install as a service:    sudo ./install_service.sh")
+    print("\033[0;32mPairing complete!\033[0m")
 
-    # Keep sockets open until script exits
-    try:
-        while True:
-            import time
-            time.sleep(60)
-    except (KeyboardInterrupt, SystemExit):
-        pass
-    finally:
-        ccontrol.close()
-        cinterrupt.close()
-        scontrol.close()
-        sinterrupt.close()
+    # Close all sockets so btk_server.py can bind to the same ports
+    ccontrol.close()
+    cinterrupt.close()
+    scontrol.close()
+    sinterrupt.close()
+
+    # Stop the GLib mainloop — main thread will launch btk_server.py
+    GLib.idle_add(loop.quit)
 
 
 if __name__ == "__main__":
@@ -176,8 +171,10 @@ if __name__ == "__main__":
     # Force device class again after BlueZ operations
     os.system("hciconfig hci0 class " + DEVICE_CLASS)
 
+    loop = GLib.MainLoop()
+
     # Start L2CAP listener in background thread
-    listen_thread = threading.Thread(target=listen_l2cap, daemon=True)
+    listen_thread = threading.Thread(target=listen_l2cap, args=(loop,), daemon=True)
     listen_thread.start()
 
     print("")
@@ -187,7 +184,16 @@ if __name__ == "__main__":
     print("")
 
     try:
-        loop = GLib.MainLoop()
         loop.run()
     except KeyboardInterrupt:
         print("\nExiting.")
+        sys.exit(0)
+
+    # Pairing complete — loop.quit() was called from listen_l2cap thread.
+    # Launch btk_server.py which will re-register HID profile and wait
+    # for Windows to reconnect.
+    btk_server_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "server", "btk_server.py")
+    print("\nStarting HID server (%s)..." % btk_server_path)
+    time.sleep(1)  # let sockets fully release
+    os.execvp(sys.executable, [sys.executable, btk_server_path])
