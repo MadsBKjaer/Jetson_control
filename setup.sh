@@ -10,13 +10,16 @@ sudo cp dbus/wof2.raspicontrol.service.conf /etc/dbus-1/system.d
 sudo systemctl restart dbus.service
 
 echo "=== Configuring Bluetooth service (disabling audio plugins) ==="
-sudo sed -i '/^ExecStart=/ s/ --noplugin=[^ ]*//g' /lib/systemd/system/bluetooth.service
-sudo sed -i '/^ExecStart=/ s/$/ --noplugin=input,audio,a2dp,avrcp,sap/' /lib/systemd/system/bluetooth.service
+sudo mkdir -p /etc/systemd/system/bluetooth.service.d
+sudo tee /etc/systemd/system/bluetooth.service.d/raspibt.conf > /dev/null <<EOF
+[Service]
+ExecStart=
+ExecStart=/usr/libexec/bluetooth/bluetoothd --compat --noplugin=sap,input,a2dp,avrcp,network,hfp,hsp
+EOF
 sudo systemctl daemon-reload
 sudo systemctl restart bluetooth.service
 
 echo ""
 echo "=== Setup complete ==="
-echo "Edit config.ini with your host's Bluetooth MAC address, then:"
-echo "  1. Pair your device:  sudo python3 pair.py"
-echo "  2. Start HID server:  sudo python3 server/btk_server.py"
+echo "Start the server:  sudo python3 server/btk_server.py"
+echo "Or install as service:  sudo ./install_service.sh"

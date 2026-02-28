@@ -18,7 +18,8 @@ sudo rm -f /etc/dbus-1/system.d/wof2.raspicontrol.service.conf
 sudo systemctl restart dbus.service
 
 echo "=== Restoring Bluetooth service (re-enabling audio plugins) ==="
-sudo sed -i '/^ExecStart=/ s/ --noplugin=[^ ]*//g' /lib/systemd/system/bluetooth.service
+sudo rm -f /etc/systemd/system/bluetooth.service.d/raspibt.conf
+sudo rmdir /etc/systemd/system/bluetooth.service.d 2>/dev/null || true
 sudo systemctl daemon-reload
 sudo systemctl restart bluetooth.service
 
