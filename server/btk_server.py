@@ -29,6 +29,55 @@ config.read(CONFIG_PATH)
 
 DEVICE_NAME = config.get("device", "name", fallback="RaspiControl")
 DEVICE_CLASS = "0x002540"
+AGENT_PATH = "/wof2/raspicontrol/agent"
+
+
+class BTAgent(dbus.service.Object):
+    """BlueZ Agent for handling reconnection authorization."""
+
+    def __init__(self, bus, path):
+        dbus.service.Object.__init__(self, bus, path)
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="", out_signature="")
+    def Release(self):
+        print("Agent: Released")
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="os", out_signature="")
+    def AuthorizeService(self, device, uuid):
+        ALLOWED = ["00001124", "00001200", "00001800", "00001801", "0000180a"]
+        prefix = uuid[:8].lower()
+        if any(prefix == a for a in ALLOWED):
+            print("Agent: AuthorizeService (%s, %s) -> ALLOWED" % (device, uuid))
+            return
+        print("Agent: AuthorizeService (%s, %s) -> REJECTED" % (device, uuid))
+        raise dbus.exceptions.DBusException(
+            "org.bluez.Error.Rejected", "Only HID services allowed")
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="s")
+    def RequestPinCode(self, device):
+        print("Agent: RequestPinCode -> '0000'")
+        return "0000"
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="u")
+    def RequestPasskey(self, device):
+        print("Agent: RequestPasskey -> 0")
+        return dbus.UInt32(0)
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="ouq", out_signature="")
+    def DisplayPasskey(self, device, passkey, entered):
+        print("Agent: DisplayPasskey (%06u)" % passkey)
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="ou", out_signature="")
+    def RequestConfirmation(self, device, passkey):
+        print("Agent: RequestConfirmation (%06d) -> confirmed" % passkey)
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="")
+    def RequestAuthorization(self, device):
+        print("Agent: RequestAuthorization -> authorized")
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="", out_signature="")
+    def Cancel(self):
+        print("Agent: Cancel")
 
 
 def get_paired_devices():
@@ -175,6 +224,16 @@ if __name__ == "__main__":
             print("  sudo python3 pair.py")
             sys.exit(1)
         print("Paired devices: %s" % ", ".join(paired))
+
+        # Register agent for reconnection authorization
+        bus = dbus.SystemBus()
+        agent = BTAgent(bus, AGENT_PATH)
+        agent_manager = dbus.Interface(
+            bus.get_object("org.bluez", "/org/bluez"),
+            "org.bluez.AgentManager1")
+        agent_manager.RegisterAgent(AGENT_PATH, "NoInputNoOutput")
+        agent_manager.RequestDefaultAgent(AGENT_PATH)
+        print("Agent registered")
 
         myservice = BTKbService()
         loop = GLib.MainLoop()
