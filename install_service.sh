@@ -16,6 +16,7 @@ Requires=bluetooth.service
 
 [Service]
 Type=simple
+Environment=PYTHONUNBUFFERED=1
 ExecStart=/usr/bin/python3 ${PROJECT_DIR}/server/btk_server.py
 WorkingDirectory=${PROJECT_DIR}
 Restart=on-failure

@@ -202,15 +202,15 @@ def enable_discoverability():
 
 
 def nudge_hosts(paired_addrs):
-    """Force paired hosts to reconnect by cycling ACL link."""
-    time.sleep(5)
+    """Nudge paired hosts to reconnect by creating ACL link (slave role)."""
+    time.sleep(3)  # Wait for L2CAP sockets to be listening
     for addr in paired_addrs:
         print("Nudging %s to reconnect..." % addr)
-        subprocess.run(["hcitool", "dc", addr],
-                       capture_output=True, timeout=5)
-        time.sleep(2)
-        subprocess.run(["hcitool", "cc", addr],
-                       capture_output=True, timeout=5)
+        try:
+            subprocess.run(["hcitool", "cc", "--role=s", addr],
+                           capture_output=True, timeout=10)
+        except subprocess.TimeoutExpired:
+            pass
         print("Nudge sent to %s" % addr)
 
 
@@ -421,6 +421,10 @@ if __name__ == "__main__":
 
         # Enable discoverable/pairable so new devices can pair anytime
         enable_discoverability()
+
+        # Nudge paired hosts to reconnect (needed after reboot)
+        if paired:
+            threading.Thread(target=nudge_hosts, args=(paired,), daemon=True).start()
 
         print("")
         print("On your host: Settings -> Bluetooth -> Add device -> find '%s'" % DEVICE_NAME)
