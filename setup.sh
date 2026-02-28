@@ -17,5 +17,6 @@ sudo systemctl restart bluetooth.service
 
 echo ""
 echo "=== Setup complete ==="
-echo "Edit config.ini with your host's Bluetooth MAC address, then run:"
-echo "  sudo python3 server/btk_server.py"
+echo "Edit config.ini with your host's Bluetooth MAC address, then:"
+echo "  1. Pair your device:  sudo python3 pair.py"
+echo "  2. Start HID server:  sudo python3 server/btk_server.py"
