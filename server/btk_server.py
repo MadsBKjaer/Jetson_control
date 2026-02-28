@@ -6,6 +6,7 @@
 from __future__ import absolute_import, print_function
 import os
 import sys
+import configparser
 import dbus
 import dbus.service
 import dbus.mainloop.glib
@@ -19,7 +20,12 @@ from logging import debug, info, warning, error
 
 logging.basicConfig(level=logging.DEBUG)
 
-TARGET_ADDRESS = "40:EC:99:50:CF:E3"
+CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "config.ini")
+config = configparser.ConfigParser()
+config.read(CONFIG_PATH)
+
+TARGET_ADDRESS = config.get("device", "target_address", fallback="")
+DEVICE_NAME = config.get("device", "name", fallback="RaspiControl")
 
 AGENT_PATH = "/org/thanhle/btkbagent"
 DEVICE_CLASS = "0x002540"
@@ -74,9 +80,6 @@ class BTAgent(dbus.service.Object):
 
 
 class BTKbDevice():
-    MY_ADDRESS = "DC:A6:32:06:6E:9F"
-    MY_DEV_NAME = "ThanhLe_Keyboard_Mouse"
-
     P_CTRL = 17
     P_INTR = 19
     SDP_RECORD_PATH = sys.path[0] + "/sdp_record.xml"
@@ -88,9 +91,9 @@ class BTKbDevice():
         self.init_bluez_profile()
 
     def init_bt_device(self):
-        print("3. Configuring Device name " + BTKbDevice.MY_DEV_NAME)
+        print("3. Configuring Device name: " + DEVICE_NAME)
         os.system("hciconfig hci0 up")
-        os.system("hciconfig hci0 name " + BTKbDevice.MY_DEV_NAME)
+        os.system("hciconfig hci0 name " + DEVICE_NAME)
         os.system("hciconfig hci0 piscan")
 
     def init_bluez_profile(self):
@@ -198,7 +201,7 @@ if __name__ == "__main__":
             sys.exit("Only root can run this script")
 
         if TARGET_ADDRESS == "":
-            sys.exit("Please fill your host mac address")
+            sys.exit("Set target_address in config.ini")
 
         DBusGMainLoop(set_as_default=True)
         bus = dbus.SystemBus()
