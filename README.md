@@ -9,7 +9,8 @@ Forked from [thanhlev/keyboard_mouse_emulate_on_raspberry](https://github.com/th
 - Auto-pairing without PIN code (SSP "Just Works" agent)
 - Windows 10/11 compatibility (audio profile rejection, correct device class)
 - No `pybluez` dependency (uses raw `socket.BTPROTO_L2CAP`)
-- Single process handles pairing + HID server simultaneously
+- Separate pairing script and HID server for clean systemd integration
+- Can run as a systemd service (auto-start on boot)
 
 ## Setup
 
@@ -30,33 +31,29 @@ Edit `config.ini` to change the device name visible during Bluetooth discovery:
 name = RaspiControl
 ```
 
-### Step 3: Start the server
+### Step 3: Pair a host device (one-time)
 
+```
+sudo python3 pair.py
+```
+
+On your host: **Settings → Bluetooth & devices → Add device** → find the device name → click to pair.
+
+The device will pair automatically without a PIN. Once pairing completes, stop the script with Ctrl+C.
+
+### Step 4: Start the HID server
+
+**Option A — Run manually:**
 ```
 sudo python3 server/btk_server.py
 ```
 
-The server will:
-1. Register as a Bluetooth HID device (keyboard + mouse)
-2. Set up auto-pairing agent (no PIN required)
-3. Make the device discoverable
-4. Wait for a host to connect
-
-### Step 4: Pair from your host
-
-On Windows: **Settings → Bluetooth & devices → Add device** → find the device name from `config.ini` → click to pair.
-
-The device will pair automatically and connect as a keyboard.
-
-### Troubleshooting: Re-pairing
-
-If pairing fails or you need to pair again, remove old pairing from RPi first:
-
+**Option B — Install as a systemd service (auto-start on boot):**
 ```
-sudo ./unpair.sh
+sudo ./install_service.sh
 ```
 
-Then remove the device from your host (Windows: Bluetooth settings → Remove device) and repeat from Step 3.
+The server checks for paired devices on startup and exits with an error if none are found.
 
 ### Step 5: Send input
 
@@ -81,6 +78,38 @@ Then remove the device from your host (Windows: Bluetooth settings → Remove de
 ```
 Arguments: `[button_bitmask] [dx] [dy] [dz]`
 
+## Re-pairing
+
+If pairing fails or you need to pair a different device:
+
+1. Remove old pairing from RPi:
+   ```
+   sudo ./unpair.sh
+   ```
+2. Remove the device from your host (Windows: Bluetooth settings → Remove device)
+3. If running as a service, stop it first: `sudo systemctl stop raspicontrol`
+4. Run `sudo python3 pair.py` again
+
+## Service management
+
+After installing with `install_service.sh`:
+
+```
+sudo systemctl status raspicontrol     # check status
+sudo journalctl -u raspicontrol -f     # view logs
+sudo systemctl stop raspicontrol       # stop
+sudo systemctl start raspicontrol      # start
+sudo systemctl restart raspicontrol    # restart
+```
+
+## Uninstall
+
+```
+sudo ./uninstall.sh
+```
+
+This removes the systemd service, D-BUS config, Bluetooth noplugin settings, and all pairings. Installed packages are kept — remove manually if needed.
+
 ## Bluetooth service configuration
 
 `setup.sh` configures bluetoothd with:
@@ -88,7 +117,7 @@ Arguments: `[button_bitmask] [dx] [dy] [dz]`
 --noplugin=input,audio,a2dp,avrcp,sap
 ```
 
-This prevents Windows from detecting the Raspberry Pi as a microphone/audio device. If you need to restore default Bluetooth behavior, remove the `--noplugin` flag from `/lib/systemd/system/bluetooth.service`.
+This prevents Windows from detecting the Raspberry Pi as a microphone/audio device. If you need to restore default Bluetooth behavior, run `uninstall.sh` or remove the `--noplugin` flag from `/lib/systemd/system/bluetooth.service`.
 
 ## Background reading
 

@@ -1,7 +1,17 @@
 #!/bin/bash
 #
-# Reverse configuration changes made by setup.sh
+# Reverse configuration changes made by setup.sh and install_service.sh
 #
+
+echo "=== Stopping and removing systemd service ==="
+if systemctl is-enabled raspicontrol.service &>/dev/null; then
+    sudo systemctl disable --now raspicontrol.service
+    echo "Service disabled and stopped."
+else
+    echo "Service not installed, skipping."
+fi
+sudo rm -f /etc/systemd/system/raspicontrol.service
+sudo systemctl daemon-reload
 
 echo "=== Removing D-BUS config ==="
 sudo rm -f /etc/dbus-1/system.d/wof2.raspicontrol.service.conf
