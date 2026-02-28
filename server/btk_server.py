@@ -2,13 +2,15 @@
 #
 # Bluetooth keyboard/Mouse emulator DBUS Service
 #
-# HID server only — no pairing logic.
-# Run pair.py first to pair a host device, then use this server.
+# Handles both pairing and HID serving in one process.
+# Usage: sudo python3 btk_server.py
 #
 
 from __future__ import absolute_import, print_function
 import os
 import sys
+import signal
+import subprocess
 import configparser
 import dbus
 import dbus.service
@@ -33,7 +35,7 @@ AGENT_PATH = "/wof2/raspicontrol/agent"
 
 
 class BTAgent(dbus.service.Object):
-    """BlueZ Agent for handling reconnection authorization."""
+    """BlueZ Agent — auto-accepts pairing, rejects non-HID profiles."""
 
     def __init__(self, bus, path):
         dbus.service.Object.__init__(self, bus, path)
@@ -95,6 +97,123 @@ def get_paired_devices():
     return paired
 
 
+def cleanup_before_start():
+    """Kill old btk_server instances and ensure bluetoothd is in clean state."""
+    my_pid = os.getpid()
+
+    # Build set of PIDs to never kill: self + all ancestors up to init
+    protected = set()
+    pid = my_pid
+    while pid > 1:
+        protected.add(pid)
+        try:
+            with open("/proc/%d/stat" % pid) as f:
+                pid = int(f.read().split(")")[1].split()[1])
+        except (IOError, IndexError, ValueError):
+            break
+    protected.add(1)
+
+    # Kill old btk_server.py python processes (excluding self and ancestors)
+    try:
+        out = subprocess.check_output(
+            ["pgrep", "-f", "python.*btk_server"], text=True).strip()
+        for pid_str in out.split("\n"):
+            pid = int(pid_str)
+            if pid not in protected:
+                print("Killing old btk_server.py (PID %d)" % pid)
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+        time.sleep(1)
+        # Force-kill any survivors
+        out = subprocess.check_output(
+            ["pgrep", "-f", "python.*btk_server"], text=True).strip()
+        for pid_str in out.split("\n"):
+            pid = int(pid_str)
+            if pid not in protected:
+                print("Force-killing old btk_server.py (PID %d)" % pid)
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+        time.sleep(0.5)
+    except (subprocess.CalledProcessError, ValueError):
+        pass  # No old processes found
+
+    # Trust all paired devices
+    try:
+        bus = dbus.SystemBus()
+        manager = dbus.Interface(
+            bus.get_object("org.bluez", "/"),
+            "org.freedesktop.DBus.ObjectManager")
+        for path, interfaces in manager.GetManagedObjects().items():
+            dev = interfaces.get("org.bluez.Device1")
+            if dev and dev.get("Paired") and not dev.get("Trusted"):
+                props = dbus.Interface(
+                    bus.get_object("org.bluez", path),
+                    "org.freedesktop.DBus.Properties")
+                props.Set("org.bluez.Device1", "Trusted", True)
+                print("Trusted: %s" % dev.get("Address", "unknown"))
+    except dbus.exceptions.DBusException as e:
+        print("Warning: could not set trusted: %s" % e)
+
+
+def register_profile_with_retry(service_record):
+    """Register HID profile, retrying if UUID is stale from a crashed process."""
+    opts = {
+        "AutoConnect": True,
+        "ServiceRecord": service_record
+    }
+
+    for i in range(10):
+        try:
+            bus = dbus.SystemBus()
+            manager = dbus.Interface(bus.get_object(
+                "org.bluez", "/org/bluez"), "org.bluez.ProfileManager1")
+            manager.RegisterProfile("/org/bluez/hci0",
+                                    BTKbDevice.UUID, opts)
+            print("Profile registered")
+            return
+        except dbus.exceptions.DBusException as e:
+            if "UUID already registered" not in str(e):
+                raise
+            if i == 0:
+                print("UUID already registered, waiting for release...")
+            time.sleep(1)
+
+    raise RuntimeError("Could not register HID profile after 10 attempts")
+
+
+def enable_discoverability():
+    """Make adapter discoverable and pairable so new devices can pair anytime."""
+    try:
+        bus = dbus.SystemBus()
+        adapter = dbus.Interface(
+            bus.get_object("org.bluez", "/org/bluez/hci0"),
+            "org.freedesktop.DBus.Properties")
+        adapter.Set("org.bluez.Adapter1", "Discoverable", dbus.Boolean(True))
+        adapter.Set("org.bluez.Adapter1", "DiscoverableTimeout", dbus.UInt32(0))
+        adapter.Set("org.bluez.Adapter1", "Pairable", dbus.Boolean(True))
+        adapter.Set("org.bluez.Adapter1", "PairableTimeout", dbus.UInt32(0))
+        print("Discoverable and pairable enabled")
+    except dbus.exceptions.DBusException as e:
+        print("Warning: could not set discoverable: %s" % e)
+
+
+def nudge_hosts(paired_addrs):
+    """Force paired hosts to reconnect by cycling ACL link."""
+    time.sleep(5)
+    for addr in paired_addrs:
+        print("Nudging %s to reconnect..." % addr)
+        subprocess.run(["hcitool", "dc", addr],
+                       capture_output=True, timeout=5)
+        time.sleep(2)
+        subprocess.run(["hcitool", "cc", addr],
+                       capture_output=True, timeout=5)
+        print("Nudge sent to %s" % addr)
+
+
 class BTKbDevice():
     P_CTRL = 17
     P_INTR = 19
@@ -103,6 +222,10 @@ class BTKbDevice():
 
     def __init__(self):
         print("Setting up BT device")
+        self.scontrol = None
+        self.sinterrupt = None
+        self.ccontrol = None
+        self.cinterrupt = None
         self.init_bt_device()
         self.init_bluez_profile()
 
@@ -115,15 +238,7 @@ class BTKbDevice():
     def init_bluez_profile(self):
         print("Configuring Bluez Profile")
         service_record = self.read_sdp_service_record()
-        opts = {
-            "AutoConnect": True,
-            "ServiceRecord": service_record
-        }
-        bus = dbus.SystemBus()
-        manager = dbus.Interface(bus.get_object(
-            "org.bluez", "/org/bluez"), "org.bluez.ProfileManager1")
-        manager.RegisterProfile("/org/bluez/hci0", BTKbDevice.UUID, opts)
-        print("Profile registered")
+        register_profile_with_retry(service_record)
         os.system("hciconfig hci0 class " + DEVICE_CLASS)
 
     def read_sdp_service_record(self):
@@ -145,11 +260,34 @@ class BTKbDevice():
         self.sinterrupt.bind((socket.BDADDR_ANY, self.P_INTR))
 
     def listen(self):
-        print("\033[0;33mWaiting for connections\033[0m")
+        """Accept one HID connection (blocks until a host connects)."""
+        # Close old client connections only
+        for attr in ('ccontrol', 'cinterrupt'):
+            sock = getattr(self, attr, None)
+            if sock:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+                setattr(self, attr, None)
 
-        self.setup_socket()
-        self.scontrol.listen(5)
-        self.sinterrupt.listen(5)
+        # Setup listening sockets if not already bound
+        if not self.scontrol:
+            print("\033[0;33mWaiting for connections\033[0m")
+            for attempt in range(5):
+                try:
+                    self.setup_socket()
+                    break
+                except OSError as e:
+                    if attempt < 4:
+                        print("Port busy, retrying in 2s... (%s)" % e)
+                        time.sleep(2)
+                    else:
+                        raise
+            self.scontrol.listen(5)
+            self.sinterrupt.listen(5)
+        else:
+            print("\033[0;33mWaiting for reconnection\033[0m")
 
         self.ccontrol, cinfo = self.scontrol.accept()
         print(
@@ -159,12 +297,36 @@ class BTKbDevice():
         print(
             "\033[0;32mGot a connection on the interrupt channel from %s\033[0m" % cinfo[0])
 
+        # Trust newly connected device
+        addr = cinfo[0]
+        try:
+            dev_path = "/org/bluez/hci0/dev_" + addr.replace(":", "_")
+            bus = dbus.SystemBus()
+            props = dbus.Interface(
+                bus.get_object("org.bluez", dev_path),
+                "org.freedesktop.DBus.Properties")
+            if not props.Get("org.bluez.Device1", "Trusted"):
+                props.Set("org.bluez.Device1", "Trusted", True)
+                print("Trusted: %s" % addr)
+        except dbus.exceptions.DBusException:
+            pass
+
+    def wait_for_disconnect(self):
+        """Block until the HID client disconnects."""
+        try:
+            while True:
+                data = self.ccontrol.recv(1024)
+                if not data:
+                    break
+        except OSError:
+            pass
+        print("\033[0;31mClient disconnected\033[0m")
+
     def send_string(self, message):
         try:
             self.cinterrupt.send(bytes(message))
         except OSError as err:
             error(err)
-            self.listen()
 
 
 class BTKbService(dbus.service.Object):
@@ -182,8 +344,27 @@ class BTKbService(dbus.service.Object):
         self.connect_thread.start()
 
     def _listen(self):
-        self.device.listen()
-        print("\033[0;32mReady to send HID reports!\033[0m")
+        """Listen loop — reconnects automatically on disconnect."""
+        while True:
+            try:
+                self.device.listen()
+
+                # Verify connection is stable (Windows reconnects multiple
+                # times during HID driver setup)
+                time.sleep(2)
+                try:
+                    self.device.ccontrol.getpeername()
+                except OSError:
+                    print("Connection dropped during setup, retrying...")
+                    continue
+
+                print("\033[0;32mReady to send HID reports!\033[0m")
+                self.device.wait_for_disconnect()
+            except Exception as e:
+                print("\033[0;31m_listen error: %s\033[0m" % e, flush=True)
+                import traceback
+                traceback.print_exc()
+                time.sleep(2)
 
     @dbus.service.method('wof2.raspicontrol.service', in_signature='yay')
     def send_keys(self, modifier_byte, keys):
@@ -216,16 +397,17 @@ if __name__ == "__main__":
 
         DBusGMainLoop(set_as_default=True)
 
+        # Clean up stale state from previous runs
+        cleanup_before_start()
+
         # Check for paired devices
         paired = get_paired_devices()
-        if not paired:
-            print("\033[0;31mNo paired Bluetooth devices found.\033[0m")
-            print("Run pair.py first to pair a host device:")
-            print("  sudo python3 pair.py")
-            sys.exit(1)
-        print("Paired devices: %s" % ", ".join(paired))
+        if paired:
+            print("Paired devices: %s" % ", ".join(paired))
+        else:
+            print("No paired devices — waiting for first pairing...")
 
-        # Register agent for reconnection authorization
+        # Register agent for pairing and reconnection
         bus = dbus.SystemBus()
         agent = BTAgent(bus, AGENT_PATH)
         agent_manager = dbus.Interface(
@@ -236,7 +418,21 @@ if __name__ == "__main__":
         print("Agent registered")
 
         myservice = BTKbService()
+
+        # Enable discoverable/pairable so new devices can pair anytime
+        enable_discoverability()
+
+        print("")
+        print("On your host: Settings -> Bluetooth -> Add device -> find '%s'" % DEVICE_NAME)
+        print("")
+
         loop = GLib.MainLoop()
         loop.run()
     except KeyboardInterrupt:
-        sys.exit()
+        print("\nInterrupted, exiting.")
+        sys.exit(0)
+    except Exception as e:
+        print("\033[0;31mFATAL: %s\033[0m" % e, flush=True)
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
