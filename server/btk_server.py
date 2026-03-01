@@ -499,7 +499,7 @@ if __name__ == "__main__":
         print("")
 
         def clean_shutdown(signum=None, frame=None):
-            """Close L2CAP sockets cleanly so host sees proper disconnect."""
+            """Close L2CAP sockets so host detects disconnect."""
             print("\nShutting down...")
             dev = myservice.device
             for attr in ('ccontrol', 'cinterrupt', 'scontrol', 'sinterrupt'):

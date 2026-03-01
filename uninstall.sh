@@ -3,6 +3,21 @@
 # Reverse configuration changes made by setup.sh and install_service.sh
 #
 
+echo "=== Stopping and removing GPIO control service ==="
+if systemctl is-enabled raspicontrol-gpio.service &>/dev/null; then
+    sudo systemctl disable --now raspicontrol-gpio.service
+    echo "GPIO service disabled and stopped."
+else
+    echo "GPIO service not installed, skipping."
+fi
+sudo rm -f /etc/systemd/system/raspicontrol-gpio.service
+
+echo "=== Restoring ACT LED ==="
+if [ -w /sys/class/leds/ACT/trigger ]; then
+    echo mmc0 | sudo tee /sys/class/leds/ACT/trigger > /dev/null
+    echo "ACT LED restored to mmc0."
+fi
+
 echo "=== Stopping and removing systemd service ==="
 if systemctl is-enabled raspicontrol.service &>/dev/null; then
     sudo systemctl disable --now raspicontrol.service
