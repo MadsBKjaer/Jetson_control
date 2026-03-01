@@ -38,6 +38,8 @@ config.read(CONFIG_PATH)
 
 AREA_W = config.getint("simulation", "area_width", fallback=600)
 AREA_H = config.getint("simulation", "area_height", fallback=300)
+SWAP_BUTTONS = config.getboolean("mouse", "swap_buttons", fallback=False)
+LEFT_BUTTON = 2 if SWAP_BUTTONS else 1
 
 
 class MouseSim:
@@ -169,7 +171,7 @@ class MouseSim:
 
     def click(self):
         """Perform a left click."""
-        self.send_mouse(1, 0, 0, 0)   # left button down
+        self.send_mouse(LEFT_BUTTON, 0, 0, 0)   # left button down
         time.sleep(random.uniform(0.05, 0.12))
         self.send_mouse(0, 0, 0, 0)   # release
         self.stats_clicks += 1
