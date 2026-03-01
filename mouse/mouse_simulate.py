@@ -60,6 +60,13 @@ class MouseSim:
         self.iface = None
         self.running = True
 
+        # Stats
+        self.stats_moves = 0
+        self.stats_clicks = 0
+        self.stats_scrolls = 0
+        self.stats_start = time.monotonic()
+        self.stats_last_log = self.stats_start
+
     def connect_dbus(self):
         """Connect to HID server D-Bus, retrying until successful."""
         while self.running:
@@ -158,6 +165,7 @@ class MouseSim:
 
         self.x = tx
         self.y = ty
+        self.stats_moves += 1
 
     def click(self, button=1, double=False):
         """Perform a click (or double-click)."""
@@ -169,12 +177,26 @@ class MouseSim:
             self.send_mouse(0, 0, 0, 0)
             if double:
                 time.sleep(random.uniform(0.04, 0.08))
+        self.stats_clicks += 1
 
     def scroll(self, ticks, direction=-1):
         """Scroll with natural per-tick delays. direction: -1=down, 1=up."""
         for _ in range(ticks):
             self.send_mouse(0, 0, 0, direction & 0xFF)
             time.sleep(random.uniform(0.1, 0.4))
+        self.stats_scrolls += 1
+
+    def log_stats(self):
+        """Print stats if a minute has passed since last log."""
+        now = time.monotonic()
+        if now - self.stats_last_log >= 60:
+            self.stats_last_log = now
+            elapsed = int(now - self.stats_start)
+            mins = elapsed // 60
+            secs = elapsed % 60
+            print("[%dm%02ds] moves=%d clicks=%d scrolls=%d pos=(%d,%d)" % (
+                mins, secs, self.stats_moves, self.stats_clicks,
+                self.stats_scrolls, self.x, self.y))
 
     def random_target(self):
         """Generate a random target within rectangle, biased toward center near edges."""
@@ -254,6 +276,7 @@ class MouseSim:
         while self.running:
             try:
                 self.pick_action()
+                self.log_stats()
                 self.random_pause()
             except Exception as e:
                 print("Action error: %s — reconnecting" % e)
