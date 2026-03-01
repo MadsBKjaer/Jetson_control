@@ -1,14 +1,16 @@
 #!/usr/bin/python3
 """
-GPIO button (start/stop) + ACT LED status for raspicontrol.
+GPIO button + ACT LED control for raspicontrol simulation.
 
 Button: GPIO 17 (pin 11) to GND (pin 9), internal pull-up, active low.
 LED:    Built-in ACT (green) via sysfs.
 
-States:
-  - LED solid ON  = server running + HID connected
-  - LED slow blink = server running, waiting for connection
-  - LED off       = server stopped
+Button toggles the mouse simulation service (raspicontrol-sim).
+The HID server (raspicontrol) stays running independently.
+
+LED states:
+  - Slow blink = simulation active
+  - Off        = simulation stopped
 """
 
 import RPi.GPIO as GPIO
@@ -22,6 +24,8 @@ DEBOUNCE_MS = 300
 POLL_INTERVAL = 0.05  # 50ms button poll
 LED_PATH = "/sys/class/leds/ACT"
 LED_BLINK_INTERVAL = 1.0  # seconds per blink cycle
+
+SIM_SERVICE = "raspicontrol-sim"
 
 
 def led_init():
@@ -48,23 +52,18 @@ def led_set(on):
         pass
 
 
-def is_server_running():
+def is_sim_running():
     return subprocess.run(
-        ["systemctl", "is-active", "--quiet", "raspicontrol"],
+        ["systemctl", "is-active", "--quiet", SIM_SERVICE],
         capture_output=True
     ).returncode == 0
 
 
-def is_hid_connected():
-    result = subprocess.run(["hcitool", "con"], capture_output=True, text=True)
-    return "ACL" in result.stdout
-
-
-def toggle_server():
-    if is_server_running():
-        subprocess.run(["systemctl", "stop", "raspicontrol"])
+def toggle_sim():
+    if is_sim_running():
+        subprocess.run(["systemctl", "stop", SIM_SERVICE])
     else:
-        subprocess.run(["systemctl", "start", "raspicontrol"])
+        subprocess.run(["systemctl", "start", SIM_SERVICE])
 
 
 def cleanup(_sig=None, _frame=None):
@@ -93,24 +92,21 @@ def main():
                 now = time.monotonic()
                 if now - last_press_time > DEBOUNCE_MS / 1000:
                     last_press_time = now
-                    toggle_server()
+                    toggle_sim()
                     # Wait for button release
                     while GPIO.input(BUTTON_PIN) == GPIO.LOW:
                         time.sleep(POLL_INTERVAL)
 
             # --- LED handling ---
-            server_up = is_server_running()
-            if not server_up:
-                led_set(False)
-            elif is_hid_connected():
-                led_set(True)
-            else:
-                # Slow blink — toggle every LED_BLINK_INTERVAL/2
+            if is_sim_running():
+                # Slow blink — simulation active
                 now = time.monotonic()
                 if now - blink_timer > LED_BLINK_INTERVAL / 2:
                     blink_timer = now
                     blink_state = not blink_state
                     led_set(blink_state)
+            else:
+                led_set(False)
 
             time.sleep(POLL_INTERVAL)
     finally:

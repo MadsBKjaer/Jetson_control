@@ -1,0 +1,233 @@
+#!/usr/bin/python3
+"""
+Human-like mouse activity simulator.
+
+Connects to the HID server via D-Bus and generates realistic mouse
+movements, clicks, and scrolling to keep a Windows machine active.
+Designed to run for hours with varied, non-repetitive patterns.
+"""
+
+import dbus
+import dbus.mainloop.glib
+import time
+import random
+import math
+import signal
+import sys
+
+# Screen bounds (virtual tracking)
+SCREEN_W = 1920
+SCREEN_H = 1080
+
+# Movement step delay
+STEP_DELAY = 0.015  # 15ms between incremental moves
+
+# D-Bus retry
+DBUS_RETRY_INTERVAL = 5
+
+
+class MouseSim:
+    def __init__(self):
+        self.x = SCREEN_W // 2
+        self.y = SCREEN_H // 2
+        self.bus = None
+        self.iface = None
+        self.running = True
+
+    def connect_dbus(self):
+        """Connect to HID server D-Bus, retrying until successful."""
+        while self.running:
+            try:
+                self.bus = dbus.SystemBus()
+                service = self.bus.get_object(
+                    'wof2.raspicontrol.service',
+                    '/wof2/raspicontrol/service')
+                self.iface = dbus.Interface(service, 'wof2.raspicontrol.service')
+                print("Connected to HID server via D-Bus")
+                return
+            except dbus.exceptions.DBusException as e:
+                print("D-Bus not ready: %s — retrying in %ds" % (e, DBUS_RETRY_INTERVAL))
+                time.sleep(DBUS_RETRY_INTERVAL)
+
+    def send_mouse(self, buttons, dx, dy, dz):
+        """Send a single mouse HID report."""
+        # Convert signed to unsigned byte
+        state = [
+            buttons & 0xFF,
+            dx & 0xFF,
+            dy & 0xFF,
+            dz & 0xFF,
+        ]
+        try:
+            self.iface.send_mouse(0, bytes(state))
+        except dbus.exceptions.DBusException:
+            print("D-Bus send failed, reconnecting...")
+            self.connect_dbus()
+
+    def move_to(self, tx, ty):
+        """Move cursor to target position with natural multi-step motion."""
+        dx_total = tx - self.x
+        dy_total = ty - self.y
+        dist = math.hypot(dx_total, dy_total)
+        if dist < 1:
+            return
+
+        # Number of steps — more steps for longer distances
+        steps = max(5, int(dist / random.uniform(3, 8)))
+
+        for i in range(steps):
+            # Progress with slight ease-in-out
+            t = (i + 1) / steps
+            ease = t * t * (3 - 2 * t)  # smoothstep
+
+            target_x = self.x + dx_total * ease
+            target_y = self.y + dy_total * ease
+
+            # Previous eased position
+            if i == 0:
+                prev_x, prev_y = float(self.x), float(self.y)
+            else:
+                t_prev = i / steps
+                ease_prev = t_prev * t_prev * (3 - 2 * t_prev)
+                prev_x = self.x + dx_total * ease_prev
+                prev_y = self.y + dy_total * ease_prev
+
+            step_dx = target_x - prev_x
+            step_dy = target_y - prev_y
+
+            # Add jitter (human hands aren't perfectly steady)
+            jitter = random.gauss(0, 0.5)
+            sdx = int(round(step_dx + jitter))
+            sdy = int(round(step_dy + jitter))
+
+            # Clamp to signed byte range
+            sdx = max(-127, min(127, sdx))
+            sdy = max(-127, min(127, sdy))
+
+            if sdx != 0 or sdy != 0:
+                self.send_mouse(0, sdx, sdy, 0)
+                time.sleep(STEP_DELAY + random.uniform(-0.005, 0.005))
+
+        self.x = tx
+        self.y = ty
+
+    def click(self, button=1, double=False):
+        """Perform a click (or double-click)."""
+        btn_mask = 1 << (button - 1)  # 1=left, 2=right, 3=middle
+        count = 2 if double else 1
+        for _ in range(count):
+            self.send_mouse(btn_mask, 0, 0, 0)  # press
+            time.sleep(random.uniform(0.05, 0.12))
+            self.send_mouse(0, 0, 0, 0)  # release
+            if double:
+                time.sleep(random.uniform(0.04, 0.08))
+
+    def scroll(self, ticks, direction=-1):
+        """Scroll with natural per-tick delays. direction: -1=down, 1=up."""
+        for _ in range(ticks):
+            self.send_mouse(0, 0, 0, direction & 0xFF)
+            time.sleep(random.uniform(0.1, 0.4))
+
+    def random_target(self):
+        """Generate a random target position, biased toward center."""
+        # Gaussian around current position with occasional large jumps
+        if random.random() < 0.15:
+            # Large jump to random area
+            tx = random.randint(100, SCREEN_W - 100)
+            ty = random.randint(100, SCREEN_H - 100)
+        else:
+            # Small-medium move near current position
+            tx = self.x + int(random.gauss(0, 80))
+            ty = self.y + int(random.gauss(0, 60))
+
+        # Clamp to screen with margin
+        tx = max(50, min(SCREEN_W - 50, tx))
+        ty = max(50, min(SCREEN_H - 50, ty))
+        return tx, ty
+
+    def random_pause(self):
+        """Wait a human-like duration between actions."""
+        r = random.random()
+        if r < 0.60:
+            # Short pause — between quick actions
+            time.sleep(random.uniform(0.5, 3.0))
+        elif r < 0.90:
+            # Medium pause — reading a paragraph
+            time.sleep(random.uniform(3.0, 10.0))
+        else:
+            # Long pause — thinking / away from screen
+            time.sleep(random.uniform(15.0, 60.0))
+
+    def pick_action(self):
+        """Choose and execute a random action."""
+        r = random.random()
+
+        if r < 0.45:
+            # Move to a new position
+            tx, ty = self.random_target()
+            self.move_to(tx, ty)
+
+        elif r < 0.65:
+            # Move then click
+            tx, ty = self.random_target()
+            self.move_to(tx, ty)
+            time.sleep(random.uniform(0.1, 0.3))
+            self.click(button=1)
+
+        elif r < 0.72:
+            # Double-click
+            tx, ty = self.random_target()
+            self.move_to(tx, ty)
+            time.sleep(random.uniform(0.1, 0.3))
+            self.click(button=1, double=True)
+
+        elif r < 0.75:
+            # Right-click
+            tx, ty = self.random_target()
+            self.move_to(tx, ty)
+            time.sleep(random.uniform(0.1, 0.3))
+            self.click(button=2)
+            # "Dismiss" the context menu after a moment
+            time.sleep(random.uniform(0.5, 1.5))
+            self.click(button=1)
+
+        elif r < 0.92:
+            # Scroll down (reading)
+            ticks = random.randint(1, 5)
+            self.scroll(ticks, direction=-1)
+
+        else:
+            # Scroll up (re-reading)
+            ticks = random.randint(1, 3)
+            self.scroll(ticks, direction=1)
+
+    def run(self):
+        """Main simulation loop."""
+        self.connect_dbus()
+        print("Simulation started (pos %d,%d)" % (self.x, self.y))
+
+        while self.running:
+            try:
+                self.pick_action()
+                self.random_pause()
+            except Exception as e:
+                print("Action error: %s — reconnecting" % e)
+                self.connect_dbus()
+
+
+def main():
+    sim = MouseSim()
+
+    def shutdown(_sig=None, _frame=None):
+        print("\nSimulation stopping...")
+        sim.running = False
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, shutdown)
+    signal.signal(signal.SIGINT, shutdown)
+
+    sim.run()
+
+
+if __name__ == "__main__":
+    main()

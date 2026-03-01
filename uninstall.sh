@@ -3,6 +3,15 @@
 # Reverse configuration changes made by setup.sh and install_service.sh
 #
 
+echo "=== Stopping and removing simulation service ==="
+if systemctl is-enabled raspicontrol-sim.service &>/dev/null; then
+    sudo systemctl disable --now raspicontrol-sim.service
+    echo "Simulation service disabled and stopped."
+else
+    echo "Simulation service not installed, skipping."
+fi
+sudo rm -f /etc/systemd/system/raspicontrol-sim.service
+
 echo "=== Stopping and removing GPIO control service ==="
 if systemctl is-enabled raspicontrol-gpio.service &>/dev/null; then
     sudo systemctl disable --now raspicontrol-gpio.service
