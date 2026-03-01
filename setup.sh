@@ -14,7 +14,7 @@ sudo mkdir -p /etc/systemd/system/bluetooth.service.d
 sudo tee /etc/systemd/system/bluetooth.service.d/raspibt.conf > /dev/null <<EOF
 [Service]
 ExecStart=
-ExecStart=/usr/libexec/bluetooth/bluetoothd --compat --noplugin=sap,input,a2dp,avrcp,network,hfp,hsp
+ExecStart=/usr/libexec/bluetooth/bluetoothd --compat --noplugin=sap,input,audio,a2dp,avrcp,network,hfp,hsp
 EOF
 sudo systemctl daemon-reload
 sudo systemctl restart bluetooth.service

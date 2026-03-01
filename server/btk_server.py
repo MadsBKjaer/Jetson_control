@@ -201,17 +201,51 @@ def enable_discoverability():
         print("Warning: could not set discoverable: %s" % e)
 
 
-def nudge_hosts(paired_addrs):
-    """Nudge paired hosts to reconnect by creating ACL link (slave role)."""
+def nudge_hosts(paired_addrs, device):
+    """Nudge paired hosts to reconnect via device-initiated HID reconnect.
+
+    With HIDReconnectInitiate=true in SDP, we connect TO the host on
+    PSM 17 (control) and PSM 19 (interrupt). The sockets are handed off
+    to device for use by send_keys/send_mouse.
+    """
     time.sleep(3)  # Wait for L2CAP sockets to be listening
     for addr in paired_addrs:
-        print("Nudging %s to reconnect..." % addr)
-        try:
-            subprocess.run(["hcitool", "cc", "--role=s", addr],
-                           capture_output=True, timeout=10)
-        except subprocess.TimeoutExpired:
-            pass
-        print("Nudge sent to %s" % addr)
+        for attempt in range(5):
+            # Stop nudging if HID is already connected
+            if device.ccontrol:
+                try:
+                    device.ccontrol.getpeername()
+                    print("HID already connected, stopping nudge")
+                    return
+                except OSError:
+                    pass
+
+            print("Nudging %s (attempt %d)..." % (addr, attempt + 1))
+
+            ctrl = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_SEQPACKET,
+                                 socket.BTPROTO_L2CAP)
+            ctrl.settimeout(5)
+            try:
+                ctrl.connect((addr, 17))  # HID Control
+                print("HID Control connected to %s" % addr)
+                intr = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_SEQPACKET,
+                                     socket.BTPROTO_L2CAP)
+                intr.settimeout(5)
+                try:
+                    intr.connect((addr, 19))  # HID Interrupt
+                    print("HID Interrupt connected to %s" % addr)
+                    device.ccontrol = ctrl
+                    device.cinterrupt = intr
+                    return
+                except Exception as e:
+                    print("HID Interrupt failed: %s" % e)
+                    ctrl.close()
+                    intr.close()
+            except Exception as e:
+                print("HID connect failed: %s" % e)
+                ctrl.close()
+
+            time.sleep(5)
 
 
 class BTKbDevice():
@@ -260,7 +294,7 @@ class BTKbDevice():
         self.sinterrupt.bind((socket.BDADDR_ANY, self.P_INTR))
 
     def listen(self):
-        """Accept one HID connection (blocks until a host connects)."""
+        """Accept one HID connection. Returns True if connected, False on timeout."""
         # Close old client connections only
         for attr in ('ccontrol', 'cinterrupt'):
             sock = getattr(self, attr, None)
@@ -289,11 +323,32 @@ class BTKbDevice():
         else:
             print("\033[0;33mWaiting for reconnection\033[0m")
 
-        self.ccontrol, cinfo = self.scontrol.accept()
+        # Use timeout so _listen can check for device-initiated connections
+        self.scontrol.settimeout(5)
+        self.sinterrupt.settimeout(5)
+        try:
+            self.ccontrol, cinfo = self.scontrol.accept()
+        except socket.timeout:
+            self.scontrol.settimeout(None)
+            self.sinterrupt.settimeout(None)
+            return False
+
         print(
             "\033[0;32mGot a connection on the control channel from %s\033[0m" % cinfo[0])
 
-        self.cinterrupt, cinfo = self.sinterrupt.accept()
+        try:
+            self.cinterrupt, cinfo = self.sinterrupt.accept()
+        except socket.timeout:
+            print("Interrupt channel timed out, dropping control")
+            self.ccontrol.close()
+            self.ccontrol = None
+            self.scontrol.settimeout(None)
+            self.sinterrupt.settimeout(None)
+            return False
+
+        self.scontrol.settimeout(None)
+        self.sinterrupt.settimeout(None)
+
         print(
             "\033[0;32mGot a connection on the interrupt channel from %s\033[0m" % cinfo[0])
 
@@ -310,14 +365,14 @@ class BTKbDevice():
                 print("Trusted: %s" % addr)
         except dbus.exceptions.DBusException:
             pass
+        return True
 
     def wait_for_disconnect(self):
         """Block until the HID client disconnects."""
         try:
             while True:
-                data = self.ccontrol.recv(1024)
-                if not data:
-                    break
+                self.ccontrol.getpeername()
+                time.sleep(1)
         except OSError:
             pass
         print("\033[0;31mClient disconnected\033[0m")
@@ -347,7 +402,20 @@ class BTKbService(dbus.service.Object):
         """Listen loop — reconnects automatically on disconnect."""
         while True:
             try:
-                self.device.listen()
+                # Check if nudge thread already established connection
+                if self.device.ccontrol:
+                    try:
+                        self.device.ccontrol.getpeername()
+                        print("\033[0;32mReady to send HID reports! (device-initiated)\033[0m")
+                        self.device.wait_for_disconnect()
+                        continue
+                    except OSError:
+                        self.device.ccontrol = None
+                        self.device.cinterrupt = None
+
+                # listen() returns False on timeout (5s), True on connection
+                if not self.device.listen():
+                    continue
 
                 # Verify connection is stable (Windows reconnects multiple
                 # times during HID driver setup)
@@ -424,17 +492,31 @@ if __name__ == "__main__":
 
         # Nudge paired hosts to reconnect (needed after reboot)
         if paired:
-            threading.Thread(target=nudge_hosts, args=(paired,), daemon=True).start()
+            threading.Thread(target=nudge_hosts, args=(paired, myservice.device), daemon=True).start()
 
         print("")
         print("On your host: Settings -> Bluetooth -> Add device -> find '%s'" % DEVICE_NAME)
         print("")
 
+        def clean_shutdown(signum=None, frame=None):
+            """Close L2CAP sockets cleanly so host sees proper disconnect."""
+            print("\nShutting down...")
+            dev = myservice.device
+            for attr in ('ccontrol', 'cinterrupt', 'scontrol', 'sinterrupt'):
+                sock = getattr(dev, attr, None)
+                if sock:
+                    try:
+                        sock.close()
+                    except Exception:
+                        pass
+            loop.quit()
+
+        signal.signal(signal.SIGTERM, clean_shutdown)
+
         loop = GLib.MainLoop()
         loop.run()
     except KeyboardInterrupt:
         print("\nInterrupted, exiting.")
-        sys.exit(0)
     except Exception as e:
         print("\033[0;31mFATAL: %s\033[0m" % e, flush=True)
         import traceback
