@@ -167,16 +167,11 @@ class MouseSim:
         self.y = ty
         self.stats_moves += 1
 
-    def click(self, button=1, double=False):
-        """Perform a click (or double-click)."""
-        btn_mask = 1 << (button - 1)
-        count = 2 if double else 1
-        for _ in range(count):
-            self.send_mouse(btn_mask, 0, 0, 0)
-            time.sleep(random.uniform(0.05, 0.12))
-            self.send_mouse(0, 0, 0, 0)
-            if double:
-                time.sleep(random.uniform(0.04, 0.08))
+    def click(self):
+        """Perform a left click."""
+        self.send_mouse(1, 0, 0, 0)   # left button down
+        time.sleep(random.uniform(0.05, 0.12))
+        self.send_mouse(0, 0, 0, 0)   # release
         self.stats_clicks += 1
 
     def scroll(self, ticks, direction=-1):
@@ -229,41 +224,50 @@ class MouseSim:
         else:
             time.sleep(random.uniform(15.0, 60.0))
 
-    def pick_action(self):
-        """Choose and execute a random action."""
+    def read_action(self):
+        """Single action while 'reading' a page: move, click, or scroll down."""
         r = random.random()
 
-        if r < 0.45:
+        if r < 0.40:
             tx, ty = self.random_target()
             self.move_to(tx, ty)
 
-        elif r < 0.65:
-            tx, ty = self.random_target()
-            self.move_to(tx, ty)
-            time.sleep(random.uniform(0.1, 0.3))
-            self.click(button=1)
-
-        elif r < 0.72:
+        elif r < 0.55:
             tx, ty = self.random_target()
             self.move_to(tx, ty)
             time.sleep(random.uniform(0.1, 0.3))
-            self.click(button=1, double=True)
-
-        elif r < 0.75:
-            tx, ty = self.random_target()
-            self.move_to(tx, ty)
-            time.sleep(random.uniform(0.1, 0.3))
-            self.click(button=2)
-            time.sleep(random.uniform(0.5, 1.5))
-            self.click(button=1)
-
-        elif r < 0.92:
-            ticks = random.randint(1, 5)
-            self.scroll(ticks, direction=-1)
+            self.click()
 
         else:
-            ticks = random.randint(1, 3)
-            self.scroll(ticks, direction=1)
+            ticks = random.randint(1, 4)
+            self.scroll(ticks, direction=-1)
+
+    def scroll_to_top(self):
+        """Fast scroll back to top of page."""
+        total_ticks = random.randint(15, 40)
+        print("Scrolling to top (%d ticks)" % total_ticks)
+        remaining = total_ticks
+        while remaining > 0 and self.running:
+            burst = min(remaining, random.randint(3, 8))
+            self.scroll(burst, direction=1)
+            remaining -= burst
+            if remaining > 0:
+                time.sleep(random.uniform(0.1, 0.3))
+
+    def read_page(self):
+        """Simulate reading one page: many actions scrolling down, then scroll to top."""
+        actions = random.randint(15, 40)
+        print("Reading page (%d actions)" % actions)
+        for _ in range(actions):
+            if not self.running:
+                return
+            self.read_action()
+            self.log_stats()
+            self.random_pause()
+
+        # Pause before scrolling back to top
+        time.sleep(random.uniform(1.0, 3.0))
+        self.scroll_to_top()
 
     def run(self):
         """Main simulation loop."""
@@ -275,9 +279,10 @@ class MouseSim:
 
         while self.running:
             try:
-                self.pick_action()
+                self.read_page()
                 self.log_stats()
-                self.random_pause()
+                # Pause between "pages"
+                time.sleep(random.uniform(2.0, 5.0))
             except Exception as e:
                 print("Action error: %s — reconnecting" % e)
                 self.connect_dbus()
