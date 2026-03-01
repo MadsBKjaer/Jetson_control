@@ -23,7 +23,7 @@ BUTTON_PIN = 17
 DEBOUNCE_MS = 300
 POLL_INTERVAL = 0.05  # 50ms button poll
 LED_PATH = "/sys/class/leds/ACT"
-LED_BLINK_INTERVAL = 1.0  # seconds per blink cycle
+LED_BLINK_INTERVAL = 0.2  # seconds per blink cycle (quick blink)
 
 SIM_SERVICE = "raspicontrol-sim"
 
