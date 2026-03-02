@@ -5,12 +5,14 @@ GPIO button + ACT LED control for raspicontrol simulation.
 Button: GPIO 17 (pin 11) to GND (pin 9), internal pull-up, active low.
 LED:    Built-in ACT (green) via sysfs.
 
-Button toggles the mouse simulation service (raspicontrol-sim).
+Short press: toggle mouse simulation service (raspicontrol-sim).
+Long press (5s+): shutdown Raspberry Pi.
 The HID server (raspicontrol) stays running independently.
 
 LED states:
-  - Slow blink = simulation active
-  - Off        = simulation stopped
+  - Quick blink  = simulation active
+  - Off          = simulation stopped
+  - Solid ON     = shutdown in progress (hold 5s)
 """
 
 import RPi.GPIO as GPIO
@@ -22,6 +24,7 @@ import sys
 BUTTON_PIN = 17
 DEBOUNCE_MS = 300
 POLL_INTERVAL = 0.05  # 50ms button poll
+LONG_PRESS_SEC = 5.0  # hold for shutdown
 LED_PATH = "/sys/class/leds/ACT"
 LED_BLINK_INTERVAL = 0.2  # seconds per blink cycle (quick blink)
 
@@ -91,11 +94,23 @@ def main():
             if GPIO.input(BUTTON_PIN) == GPIO.LOW:
                 now = time.monotonic()
                 if now - last_press_time > DEBOUNCE_MS / 1000:
-                    last_press_time = now
-                    toggle_sim()
-                    # Wait for button release
+                    press_start = time.monotonic()
+                    led_set(True)  # solid ON while holding
+                    # Wait for release or long press
                     while GPIO.input(BUTTON_PIN) == GPIO.LOW:
+                        held = time.monotonic() - press_start
+                        if held >= LONG_PRESS_SEC:
+                            print("Long press — graceful shutdown")
+                            subprocess.run(["systemctl", "stop", SIM_SERVICE])
+                            subprocess.run(["systemctl", "stop", "raspicontrol"])
+                            led_restore()
+                            GPIO.cleanup()
+                            subprocess.run(["shutdown", "-h", "now"])
+                            sys.exit(0)
                         time.sleep(POLL_INTERVAL)
+                    last_press_time = time.monotonic()
+                    # Short press — toggle simulation
+                    toggle_sim()
 
             # --- LED handling ---
             if is_sim_running():
