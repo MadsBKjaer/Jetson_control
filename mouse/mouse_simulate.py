@@ -20,6 +20,8 @@ import math
 import signal
 import sys
 import os
+from datetime import datetime
+import json
 
 # Screen hard bounds
 SCREEN_W = 1920
@@ -40,6 +42,8 @@ AREA_W = config.getint("simulation", "area_width", fallback=600)
 AREA_H = config.getint("simulation", "area_height", fallback=300)
 SWAP_BUTTONS = config.getboolean("mouse", "swap_buttons", fallback=False)
 LEFT_BUTTON = 2 if SWAP_BUTTONS else 1
+
+STATS_FILE = "/var/tmp/raspicontrol-sim-stats.json"
 
 
 class MouseSim:
@@ -62,12 +66,11 @@ class MouseSim:
         self.iface = None
         self.running = True
 
-        # Stats
-        self.stats_moves = 0
-        self.stats_clicks = 0
-        self.stats_scrolls = 0
-        self.stats_start = time.monotonic()
-        self.stats_last_log = self.stats_start
+        # Stats — load accumulated daily stats from file
+        self.stats_session_start = time.monotonic()
+        self.stats_last_log = self.stats_session_start
+        self.stats_today = str(datetime.now().date())
+        self._load_daily_stats()
 
     def connect_dbus(self):
         """Connect to HID server D-Bus, retrying until successful."""
@@ -183,17 +186,76 @@ class MouseSim:
             time.sleep(random.uniform(0.1, 0.4))
         self.stats_scrolls += 1
 
+    def _load_daily_stats(self):
+        """Load accumulated stats for today from file, or start fresh."""
+        try:
+            with open(STATS_FILE, "r") as f:
+                data = json.load(f)
+            if data.get("date") == self.stats_today:
+                self.stats_moves = data.get("moves", 0)
+                self.stats_clicks = data.get("clicks", 0)
+                self.stats_scrolls = data.get("scrolls", 0)
+                self.stats_uptime = data.get("uptime", 0)
+                print("Resumed daily stats: moves=%d clicks=%d scrolls=%d uptime=%ds" % (
+                    self.stats_moves, self.stats_clicks, self.stats_scrolls, self.stats_uptime))
+                return
+        except (OSError, json.JSONDecodeError, KeyError):
+            pass
+        self.stats_moves = 0
+        self.stats_clicks = 0
+        self.stats_scrolls = 0
+        self.stats_uptime = 0
+
+    def _save_daily_stats(self):
+        """Save accumulated stats to file."""
+        session_secs = int(time.monotonic() - self.stats_session_start)
+        data = {
+            "date": self.stats_today,
+            "moves": self.stats_moves,
+            "clicks": self.stats_clicks,
+            "scrolls": self.stats_scrolls,
+            "uptime": self.stats_uptime + session_secs,
+        }
+        try:
+            with open(STATS_FILE, "w") as f:
+                json.dump(data, f)
+        except OSError:
+            pass
+
+    def _total_uptime(self):
+        """Total uptime today: previous sessions + current session."""
+        return self.stats_uptime + int(time.monotonic() - self.stats_session_start)
+
     def log_stats(self):
-        """Print stats if a minute has passed since last log."""
+        """Print stats if a minute has passed since last log. Daily summary at midnight."""
         now = time.monotonic()
+        today = str(datetime.now().date())
+
+        # Daily summary at midnight
+        if today != self.stats_today:
+            uptime = self._total_uptime()
+            hours = uptime // 3600
+            mins = (uptime % 3600) // 60
+            print("=== DAILY SUMMARY %s === uptime=%dh%02dm moves=%d clicks=%d scrolls=%d" % (
+                self.stats_today, hours, mins,
+                self.stats_moves, self.stats_clicks, self.stats_scrolls))
+            # Reset for new day
+            self.stats_today = today
+            self.stats_moves = 0
+            self.stats_clicks = 0
+            self.stats_scrolls = 0
+            self.stats_uptime = 0
+            self.stats_session_start = now
+
         if now - self.stats_last_log >= 60:
             self.stats_last_log = now
-            elapsed = int(now - self.stats_start)
-            mins = elapsed // 60
-            secs = elapsed % 60
+            uptime = self._total_uptime()
+            mins = uptime // 60
+            secs = uptime % 60
             print("[%dm%02ds] moves=%d clicks=%d scrolls=%d pos=(%d,%d)" % (
                 mins, secs, self.stats_moves, self.stats_clicks,
                 self.stats_scrolls, self.x, self.y))
+            self._save_daily_stats()
 
     def random_target(self):
         """Generate a random target within rectangle, biased toward center near edges."""
@@ -296,6 +358,7 @@ def main():
     def shutdown(_sig=None, _frame=None):
         print("\nSimulation stopping...")
         sim.running = False
+        sim._save_daily_stats()
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, shutdown)
