@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Remove all paired Bluetooth devices from Raspberry Pi
+# Remove all paired Bluetooth devices from Jetson
 # Use when you need to re-pair with a host
 #
 

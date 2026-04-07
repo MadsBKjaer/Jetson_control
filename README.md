@@ -1,8 +1,8 @@
-# Raspberry Pi Bluetooth Keyboard & Mouse Emulator
+# Jetson Orin Nano Bluetooth Keyboard & Mouse Emulator
 
-Turn your Raspberry Pi into a Bluetooth keyboard and mouse for Windows 10/11, macOS, Linux, Android, and iPad.
+Turn your Jetson Orin Nano into a Bluetooth keyboard and mouse for Windows 10/11, macOS, Linux, Android, and iPad.
 
-Forked from [thanhlev/keyboard_mouse_emulate_on_raspberry](https://github.com/thanhlev/keyboard_mouse_emulate_on_raspberry) with added Windows 10/11 support.
+Adapted from [thanhlev/keyboard_mouse_emulate_on_raspberry](https://github.com/thanhlev/keyboard_mouse_emulate_on_raspberry) with added Windows 10/11 support.
 
 ## What's different from the original
 
@@ -30,7 +30,7 @@ Edit `config.ini`:
 
 ```ini
 [device]
-name = RaspiControl
+name = JetsonControl
 
 [mouse]
 # Set to true if Windows has "swap mouse buttons" enabled
@@ -55,9 +55,9 @@ sudo ./install_service.sh
 ```
 
 This installs three services:
-- `raspicontrol` — Bluetooth HID server (pairing + input)
-- `raspicontrol-sim` — mouse simulation (auto-starts with server)
-- `raspicontrol-gpio` — GPIO button + ACT LED control
+- `jetsoncontrol` — Bluetooth HID server (pairing + input)
+- `jetsoncontrol-sim` — mouse simulation (auto-starts with server)
+- `jetsoncontrol-gpio` — GPIO button + LED control
 
 ### Step 4: Pair a host device (one-time)
 
@@ -117,12 +117,12 @@ The HID server runs independently and is not affected by the button.
 
 If pairing fails or you need to pair a different device:
 
-1. Remove old pairing from RPi:
+1. Remove old pairing from Jetson:
    ```
    sudo ./unpair.sh
    ```
 2. Remove the device from your host (Windows: Bluetooth settings → Remove device)
-3. If running as a service, restart it: `sudo systemctl restart raspicontrol`
+3. If running as a service, restart it: `sudo systemctl restart jetsoncontrol`
 4. Pair again from your host (the server is always ready for new pairings)
 
 ## Service management
@@ -130,11 +130,11 @@ If pairing fails or you need to pair a different device:
 After installing with `install_service.sh`:
 
 ```
-sudo systemctl status raspicontrol         # HID server status
-sudo systemctl status raspicontrol-sim     # mouse simulation status
-sudo systemctl status raspicontrol-gpio    # GPIO control status
-sudo journalctl -u raspicontrol -f         # server logs
-sudo journalctl -u raspicontrol-sim -f     # simulation logs
+sudo systemctl status jetsoncontrol         # HID server status
+sudo systemctl status jetsoncontrol-sim     # mouse simulation status
+sudo systemctl status jetsoncontrol-gpio    # GPIO control status
+sudo journalctl -u jetsoncontrol -f         # server logs
+sudo journalctl -u jetsoncontrol-sim -f     # simulation logs
 ```
 
 ## Uninstall
@@ -147,12 +147,12 @@ This removes all three systemd services, restores the ACT LED, removes D-BUS con
 
 ## Bluetooth service configuration
 
-`setup.sh` configures bluetoothd via a systemd drop-in (`/etc/systemd/system/bluetooth.service.d/raspibt.conf`):
+`setup.sh` configures bluetoothd via a systemd drop-in (`/etc/systemd/system/bluetooth.service.d/jetsonbt.conf`):
 ```
 --compat --noplugin=sap,input,audio,a2dp,avrcp,network,hfp,hsp
 ```
 
-This prevents Windows from detecting the Raspberry Pi as a microphone/audio device. To restore default Bluetooth behavior, run `uninstall.sh`.
+This prevents Windows from detecting the Jetson as a microphone/audio device. To restore default Bluetooth behavior, run `uninstall.sh`.
 
 ## Background reading
 

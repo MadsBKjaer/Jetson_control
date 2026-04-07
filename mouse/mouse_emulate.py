@@ -13,8 +13,8 @@ class MouseClient():
 		self.state = [0, 0, 0, 0]
 		self.bus = dbus.SystemBus()
 		self.btkservice = self.bus.get_object(
-			'wof2.raspicontrol.service', '/wof2/raspicontrol/service')
-		self.iface = dbus.Interface(self.btkservice, 'wof2.raspicontrol.service')
+			'wof2.jetsoncontrol.service', '/wof2/jetsoncontrol/service')
+		self.iface = dbus.Interface(self.btkservice, 'wof2.jetsoncontrol.service')
 	def send_current(self):
 		try:
 			self.iface.send_mouse(0, bytes(self.state))

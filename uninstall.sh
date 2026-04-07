@@ -4,45 +4,45 @@
 #
 
 echo "=== Stopping and removing simulation service ==="
-if systemctl is-enabled raspicontrol-sim.service &>/dev/null; then
-    sudo systemctl disable --now raspicontrol-sim.service
+if systemctl is-enabled jetsoncontrol-sim.service &>/dev/null; then
+    sudo systemctl disable --now jetsoncontrol-sim.service
     echo "Simulation service disabled and stopped."
 else
     echo "Simulation service not installed, skipping."
 fi
-sudo rm -f /etc/systemd/system/raspicontrol-sim.service
+sudo rm -f /etc/systemd/system/jetsoncontrol-sim.service
 
 echo "=== Stopping and removing GPIO control service ==="
-if systemctl is-enabled raspicontrol-gpio.service &>/dev/null; then
-    sudo systemctl disable --now raspicontrol-gpio.service
+if systemctl is-enabled jetsoncontrol-gpio.service &>/dev/null; then
+    sudo systemctl disable --now jetsoncontrol-gpio.service
     echo "GPIO service disabled and stopped."
 else
     echo "GPIO service not installed, skipping."
 fi
-sudo rm -f /etc/systemd/system/raspicontrol-gpio.service
+sudo rm -f /etc/systemd/system/jetsoncontrol-gpio.service
 
-echo "=== Restoring ACT LED ==="
-if [ -w /sys/class/leds/ACT/trigger ]; then
-    echo mmc0 | sudo tee /sys/class/leds/ACT/trigger > /dev/null
-    echo "ACT LED restored to mmc0."
+echo "=== Restoring LED ==="
+if [ -w /sys/class/leds/mmc0/trigger ]; then
+    echo mmc0 | sudo tee /sys/class/leds/mmc0/trigger > /dev/null
+    echo "LED restored to mmc0."
 fi
 
 echo "=== Stopping and removing systemd service ==="
-if systemctl is-enabled raspicontrol.service &>/dev/null; then
-    sudo systemctl disable --now raspicontrol.service
+if systemctl is-enabled jetsoncontrol.service &>/dev/null; then
+    sudo systemctl disable --now jetsoncontrol.service
     echo "Service disabled and stopped."
 else
     echo "Service not installed, skipping."
 fi
-sudo rm -f /etc/systemd/system/raspicontrol.service
+sudo rm -f /etc/systemd/system/jetsoncontrol.service
 sudo systemctl daemon-reload
 
 echo "=== Removing D-BUS config ==="
-sudo rm -f /etc/dbus-1/system.d/wof2.raspicontrol.service.conf
+sudo rm -f /etc/dbus-1/system.d/wof2.jetsoncontrol.service.conf
 sudo systemctl restart dbus.service
 
 echo "=== Restoring Bluetooth service (re-enabling audio plugins) ==="
-sudo rm -f /etc/systemd/system/bluetooth.service.d/raspibt.conf
+sudo rm -f /etc/systemd/system/bluetooth.service.d/jetsonbt.conf
 sudo rmdir /etc/systemd/system/bluetooth.service.d 2>/dev/null || true
 sudo systemctl daemon-reload
 sudo systemctl restart bluetooth.service

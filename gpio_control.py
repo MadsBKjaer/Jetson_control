@@ -1,13 +1,13 @@
 #!/usr/bin/python3
 """
-GPIO button + ACT LED control for raspicontrol simulation.
+GPIO button + ACT LED control for jetsoncontrol simulation.
 
 Button: GPIO 17 (pin 11) to GND (pin 9), internal pull-up, active low.
 LED:    Built-in ACT (green) via sysfs.
 
-Short press: toggle mouse simulation service (raspicontrol-sim).
-Long press (5s+): shutdown Raspberry Pi.
-The HID server (raspicontrol) stays running independently.
+Short press: toggle mouse simulation service (jetsoncontrol-sim).
+Long press (5s+): shutdown Jetson.
+The HID server (jetsoncontrol) stays running independently.
 
 LED states:
   - Quick blink  = simulation active
@@ -15,7 +15,7 @@ LED states:
   - Solid ON     = shutdown in progress (hold 5s)
 """
 
-import RPi.GPIO as GPIO
+import Jetson.GPIO as GPIO
 import subprocess
 import time
 import signal
@@ -25,10 +25,10 @@ BUTTON_PIN = 17
 DEBOUNCE_MS = 300
 POLL_INTERVAL = 0.05  # 50ms button poll
 LONG_PRESS_SEC = 5.0  # hold for shutdown
-LED_PATH = "/sys/class/leds/ACT"
+LED_PATH = "/sys/class/leds/mmc0"
 LED_BLINK_INTERVAL = 0.2  # seconds per blink cycle (quick blink)
 
-SIM_SERVICE = "raspicontrol-sim"
+SIM_SERVICE = "jetsoncontrol-sim"
 
 
 def led_init():
@@ -102,7 +102,7 @@ def main():
                         if held >= LONG_PRESS_SEC:
                             print("Long press — graceful shutdown")
                             subprocess.run(["systemctl", "stop", SIM_SERVICE])
-                            subprocess.run(["systemctl", "stop", "raspicontrol"])
+                            subprocess.run(["systemctl", "stop", "jetsoncontrol"])
                             led_restore()
                             GPIO.cleanup()
                             subprocess.run(["shutdown", "-h", "now"])

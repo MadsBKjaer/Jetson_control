@@ -3,15 +3,15 @@ set -e
 
 echo "=== Installing dependencies ==="
 sudo apt-get update -y
-sudo apt-get install -y --ignore-missing bluez bluez-tools python3 python3-dbus python3-pyudev python3-evdev python3-gi
+sudo apt-get install -y --ignore-missing bluez bluez-tools python3 python3-dbus python3-pyudev python3-evdev python3-gi python3-jetson-gpio
 
 echo "=== Configuring D-BUS permissions ==="
-sudo cp dbus/wof2.raspicontrol.service.conf /etc/dbus-1/system.d
+sudo cp dbus/wof2.jetsoncontrol.service.conf /etc/dbus-1/system.d
 sudo systemctl restart dbus.service
 
 echo "=== Configuring Bluetooth service (disabling audio plugins) ==="
 sudo mkdir -p /etc/systemd/system/bluetooth.service.d
-sudo tee /etc/systemd/system/bluetooth.service.d/raspibt.conf > /dev/null <<EOF
+sudo tee /etc/systemd/system/bluetooth.service.d/jetsonbt.conf > /dev/null <<EOF
 [Service]
 ExecStart=
 ExecStart=/usr/libexec/bluetooth/bluetoothd --compat --noplugin=sap,input,audio,a2dp,avrcp,network,hfp,hsp

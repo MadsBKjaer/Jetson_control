@@ -43,7 +43,7 @@ AREA_H = config.getint("simulation", "area_height", fallback=300)
 SWAP_BUTTONS = config.getboolean("mouse", "swap_buttons", fallback=False)
 LEFT_BUTTON = 2 if SWAP_BUTTONS else 1
 
-STATS_FILE = "/var/tmp/raspicontrol-sim-stats.json"
+STATS_FILE = "/var/tmp/jetsoncontrol-sim-stats.json"
 
 
 class MouseSim:
@@ -78,9 +78,9 @@ class MouseSim:
             try:
                 self.bus = dbus.SystemBus()
                 service = self.bus.get_object(
-                    'wof2.raspicontrol.service',
-                    '/wof2/raspicontrol/service')
-                self.iface = dbus.Interface(service, 'wof2.raspicontrol.service')
+                    'wof2.jetsoncontrol.service',
+                    '/wof2/jetsoncontrol/service')
+                self.iface = dbus.Interface(service, 'wof2.jetsoncontrol.service')
                 print("Connected to HID server via D-Bus")
                 return
             except dbus.exceptions.DBusException as e:

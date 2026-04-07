@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-SERVICE_NAME="raspicontrol"
+SERVICE_NAME="jetsoncontrol"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -10,7 +10,7 @@ echo "Project directory: ${PROJECT_DIR}"
 
 sudo tee "${SERVICE_FILE}" > /dev/null <<EOF
 [Unit]
-Description=RaspiControl Bluetooth HID Server
+Description=JetsonControl Bluetooth HID Server
 After=bluetooth.service
 Requires=bluetooth.service
 
@@ -38,7 +38,7 @@ echo "Stop:          sudo systemctl stop ${SERVICE_NAME}"
 echo "Disable:       sudo systemctl disable ${SERVICE_NAME}"
 
 # --- Mouse simulation service ---
-SIM_SERVICE_NAME="raspicontrol-sim"
+SIM_SERVICE_NAME="jetsoncontrol-sim"
 SIM_SERVICE_FILE="/etc/systemd/system/${SIM_SERVICE_NAME}.service"
 
 echo ""
@@ -46,9 +46,9 @@ echo "=== Installing ${SIM_SERVICE_NAME} systemd service ==="
 
 sudo tee "${SIM_SERVICE_FILE}" > /dev/null <<EOF
 [Unit]
-Description=RaspiControl Mouse Simulation
-After=raspicontrol.service
-Requires=raspicontrol.service
+Description=JetsonControl Mouse Simulation
+After=jetsoncontrol.service
+Requires=jetsoncontrol.service
 
 [Service]
 Type=simple
@@ -72,7 +72,7 @@ echo "Check status:  sudo systemctl status ${SIM_SERVICE_NAME}"
 echo "View logs:     sudo journalctl -u ${SIM_SERVICE_NAME} -f"
 
 # --- GPIO control service ---
-GPIO_SERVICE_NAME="raspicontrol-gpio"
+GPIO_SERVICE_NAME="jetsoncontrol-gpio"
 GPIO_SERVICE_FILE="/etc/systemd/system/${GPIO_SERVICE_NAME}.service"
 
 echo ""
@@ -80,8 +80,8 @@ echo "=== Installing ${GPIO_SERVICE_NAME} systemd service ==="
 
 sudo tee "${GPIO_SERVICE_FILE}" > /dev/null <<EOF
 [Unit]
-Description=RaspiControl GPIO Button + LED Control
-After=raspicontrol.service
+Description=JetsonControl GPIO Button + LED Control
+After=jetsoncontrol.service
 
 [Service]
 Type=simple

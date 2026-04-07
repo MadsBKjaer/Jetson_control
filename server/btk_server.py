@@ -29,9 +29,9 @@ CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "co
 config = configparser.ConfigParser()
 config.read(CONFIG_PATH)
 
-DEVICE_NAME = config.get("device", "name", fallback="RaspiControl")
+DEVICE_NAME = config.get("device", "name", fallback="JetsonControl")
 DEVICE_CLASS = "0x002540"
-AGENT_PATH = "/wof2/raspicontrol/agent"
+AGENT_PATH = "/wof2/jetsoncontrol/agent"
 
 
 class BTAgent(dbus.service.Object):
@@ -389,9 +389,9 @@ class BTKbService(dbus.service.Object):
     def __init__(self):
         print("Setting up service")
         bus_name = dbus.service.BusName(
-            "wof2.raspicontrol.service", bus=dbus.SystemBus())
+            "wof2.jetsoncontrol.service", bus=dbus.SystemBus())
         dbus.service.Object.__init__(
-            self, bus_name, "/wof2/raspicontrol/service")
+            self, bus_name, "/wof2/jetsoncontrol/service")
         self.device = BTKbDevice()
 
         # Start listening in a thread so GLib mainloop can handle D-BUS
@@ -434,7 +434,7 @@ class BTKbService(dbus.service.Object):
                 traceback.print_exc()
                 time.sleep(2)
 
-    @dbus.service.method('wof2.raspicontrol.service', in_signature='yay')
+    @dbus.service.method('wof2.jetsoncontrol.service', in_signature='yay')
     def send_keys(self, modifier_byte, keys):
         print("Get send_keys request through dbus")
         print("key msg: ", keys)
@@ -447,7 +447,7 @@ class BTKbService(dbus.service.Object):
             count += 1
         self.device.send_string(state)
 
-    @dbus.service.method('wof2.raspicontrol.service', in_signature='yay')
+    @dbus.service.method('wof2.jetsoncontrol.service', in_signature='yay')
     def send_mouse(self, modifier_byte, keys):
         state = [0xA1, 2, 0, 0, 0, 0]
         count = 2
