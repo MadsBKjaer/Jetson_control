@@ -37,67 +37,6 @@ echo "View logs:     sudo journalctl -u ${SERVICE_NAME} -f"
 echo "Stop:          sudo systemctl stop ${SERVICE_NAME}"
 echo "Disable:       sudo systemctl disable ${SERVICE_NAME}"
 
-# --- Mouse simulation service ---
-SIM_SERVICE_NAME="jetsoncontrol-sim"
-SIM_SERVICE_FILE="/etc/systemd/system/${SIM_SERVICE_NAME}.service"
-
-echo ""
-echo "=== Installing ${SIM_SERVICE_NAME} systemd service ==="
-
-sudo tee "${SIM_SERVICE_FILE}" > /dev/null <<EOF
-[Unit]
-Description=JetsonControl Mouse Simulation
-After=jetsoncontrol.service
-Requires=jetsoncontrol.service
-
-[Service]
-Type=simple
-Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 ${PROJECT_DIR}/mouse/mouse_simulate.py
-WorkingDirectory=${PROJECT_DIR}
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable "${SIM_SERVICE_NAME}.service"
-sudo systemctl start "${SIM_SERVICE_NAME}.service"
-
-echo ""
-echo "=== Simulation service installed and started ==="
-echo "Check status:  sudo systemctl status ${SIM_SERVICE_NAME}"
-echo "View logs:     sudo journalctl -u ${SIM_SERVICE_NAME} -f"
-
-# --- GPIO control service ---
-GPIO_SERVICE_NAME="jetsoncontrol-gpio"
-GPIO_SERVICE_FILE="/etc/systemd/system/${GPIO_SERVICE_NAME}.service"
-
-echo ""
-echo "=== Installing ${GPIO_SERVICE_NAME} systemd service ==="
-
-sudo tee "${GPIO_SERVICE_FILE}" > /dev/null <<EOF
-[Unit]
-Description=JetsonControl GPIO Button + LED Control
-After=jetsoncontrol.service
-
-[Service]
-Type=simple
-ExecStart=/usr/bin/python3 ${PROJECT_DIR}/gpio_control.py
-WorkingDirectory=${PROJECT_DIR}
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable "${GPIO_SERVICE_NAME}.service"
-sudo systemctl start "${GPIO_SERVICE_NAME}.service"
-
 echo ""
 echo "=== GPIO service installed and started ==="
 echo "Check status:  sudo systemctl status ${GPIO_SERVICE_NAME}"

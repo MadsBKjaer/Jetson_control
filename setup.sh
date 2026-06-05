@@ -11,12 +11,18 @@ sudo systemctl restart dbus.service
 
 echo "=== Configuring Bluetooth service (disabling audio plugins) ==="
 sudo mkdir -p /etc/systemd/system/bluetooth.service.d
-sudo tee /etc/systemd/system/bluetooth.service.d/jetsonbt.conf > /dev/null <<EOF
+sudo rm -f /etc/systemd/system/bluetooth.service.d/jetsonbt.conf
+sudo rm -f /etc/systemd/system/bluetooth.service.d/99-jetsonbt.conf
+sudo tee /etc/systemd/system/bluetooth.service.d/zz-jetsonbt.conf > /dev/null <<EOF
 [Service]
 ExecStart=
-ExecStart=/usr/libexec/bluetooth/bluetoothd --compat --noplugin=sap,input,audio,a2dp,avrcp,network,hfp,hsp
+ExecStart=/usr/lib/bluetooth/bluetoothd --compat -E --noplugin=sap,input,audio,a2dp,avrcp,network,hfp,hsp
 EOF
 sudo systemctl daemon-reload
+
+echo "=== Setting Device Class natively in BlueZ ==="
+sudo sed -i 's/^#*Class =.*/Class = 0x0025C0/' /etc/bluetooth/main.conf
+
 sudo systemctl restart bluetooth.service
 
 echo ""

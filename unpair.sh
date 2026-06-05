@@ -4,7 +4,7 @@
 # Use when you need to re-pair with a host
 #
 
-DEVICES=$(bluetoothctl devices Paired 2>/dev/null | awk '{print $2}')
+DEVICES=$(bluetoothctl paired-devices | awk '{print $2}')
 
 if [ -z "$DEVICES" ]; then
     echo "No paired devices found."
@@ -12,7 +12,7 @@ if [ -z "$DEVICES" ]; then
 fi
 
 echo "Paired devices:"
-bluetoothctl devices Paired
+bluetoothctl paired-devices
 echo ""
 
 for mac in $DEVICES; do

@@ -1,85 +1,72 @@
 # Jetson Orin Nano Bluetooth Keyboard & Mouse Emulator
 
-Turn your Jetson Orin Nano into a Bluetooth keyboard and mouse for Windows 10/11, macOS, Linux, Android, and iPad.
+Turn your Jetson Orin Nano into a Bluetooth keyboard and mouse interface for AI models, compatible with Windows 10/11, macOS, Linux, Android, and iPad.
 
 Adapted from [thanhlev/keyboard_mouse_emulate_on_raspberry](https://github.com/thanhlev/keyboard_mouse_emulate_on_raspberry) with added Windows 10/11 support.
 
-## What's different from the original
+## Installation
 
-- Auto-pairing without PIN code (SSP "Just Works" agent)
-- Windows 10/11 compatibility (audio profile rejection, correct device class)
-- No `pybluez` dependency (uses raw `socket.BTPROTO_L2CAP`)
-- Single process handles both pairing and HID serving
-- Can run as a systemd service (auto-start on boot)
-- Human-like mouse simulation (movements, clicks, scrolling)
-- GPIO button to toggle simulation + ACT LED status indicator
+### As a Python Package
 
-## Setup
-
-### Step 1: Install dependencies
-
+```bash
+pip install -e .
 ```
+
+This installs the `jetson-control` package for use in your AI model.
+
+### System Setup
+
+1. Run the system setup:
+```bash
 sudo ./setup.sh
 ```
 
-This installs BlueZ, Python packages, configures D-BUS permissions, and disables Bluetooth audio plugins (required for Windows compatibility).
-
-### Step 2: Configure (optional)
-
-Edit `config.ini`:
-
-```ini
-[device]
-name = JetsonControl
-
-[mouse]
-# Set to true if Windows has "swap mouse buttons" enabled
-swap_buttons = false
-
-[simulation]
-# Mouse movement area (pixels), centered at initial cursor position
-area_width = 600
-area_height = 300
-```
-
-### Step 3: Start the server
-
-**Option A — Run manually:**
-```
-sudo python3 server/btk_server.py
-```
-
-**Option B — Install as systemd services (auto-start on boot):**
-```
+2. Install the service:
+```bash
 sudo ./install_service.sh
 ```
 
-This installs three services:
+This installs the service:
 - `jetsoncontrol` — Bluetooth HID server (pairing + input)
-- `jetsoncontrol-sim` — mouse simulation (auto-starts with server)
-- `jetsoncontrol-gpio` — GPIO button + LED control
 
-### Step 4: Pair a host device (one-time)
+## Screen Capture Setup
 
-On your host: **Settings → Bluetooth & devices → Add device** → find the device name → click to pair.
+To enable screen capture from the host computer:
 
-The device will pair automatically without a PIN.
+1. **Install VNC server on the host:**
+   - **Windows**: Install TightVNC, RealVNC, or UltraVNC server
+   - **macOS**: System Preferences → Sharing → Screen Sharing (enable VNC)
+   - **Linux**: Install TightVNC or x11vnc
 
-### Step 5: Send input (after pairing)
+2. **Configure VNC settings:**
+   Edit `config.ini`:
+   ```ini
+   [screen]
+   vnc_host = 192.168.1.100  # IP address of host computer
+   vnc_port = 5900           # VNC port (default 5900)
+   vnc_password = your_password  # VNC password (leave empty if none)
+   ```
 
-**Keyboard (physical):**
-```
-./keyboard/kb_client.py
-```
+3. **Usage in AI models:**
+   ```python
+   from jetson_control.screen import capture_screenshot, capture_region
+
+   # Capture full screen
+   screenshot = capture_screenshot()
+   if screenshot:
+       screenshot.save("screen.png")
+
+   # Capture region (x=100, y=100, width=800, height=600)
+   region = capture_region(100, 100, 800, 600)
+   ```
+
+**Note:** For low latency, use a fast VNC server and ensure the host and Jetson are on the same network. VNC typically provides 50-200ms latency depending on network and settings.
+
+## Manual Usage
 
 **Keyboard (send string programmatically):**
 ```
 ./keyboard/send_string.py "hello world"
-```
-
-**Mouse (physical USB mouse forwarded via Bluetooth):**
-```
-./mouse/mouse_client.py
 ```
 
 **Mouse (programmatic):**
@@ -87,16 +74,6 @@ The device will pair automatically without a PIN.
 ./mouse/mouse_emulate.py 0 10 0 0
 ```
 Arguments: `[button_bitmask] [dx] [dy] [dz]`
-
-## Mouse simulation
-
-`mouse/mouse_simulate.py` generates human-like mouse activity to keep the host machine active. It simulates reading a web page:
-
-1. **Reading phase** — scrolls down, moves cursor, clicks (15–40 actions with natural pauses)
-2. **Return to top** — fast scroll up (simulating going back to the top of the page)
-3. **Repeat**
-
-Movement is constrained to a configurable rectangle (`area_width` × `area_height` in `config.ini`), centered at the screen center. Near edges, the cursor slows down and steers back toward the center.
 
 Statistics are logged every minute:
 ```
